@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AFDPV – Formation en ligne</title>
+<style>
+:root{--bg:#fff;--fg:#14213d;--blue:#1d3a6b;--gold:#c9a227;--soft:#f4f6fb;--bd:#dfe5f1}
+@media (prefers-color-scheme:dark){:root{--bg:#0f1830;--fg:#eef1f8;--blue:#7ea2e8;--soft:#16224a;--bd:#2c3b6b}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font-family:system-ui,sans-serif;line-height:1.5}
+header{background:var(--soft);border-bottom:3px solid var(--gold);padding:12px 16px;display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:space-between}
+header b{color:var(--blue)}main{max-width:760px;margin:auto;padding:16px}
+.c{background:var(--soft);border:1px solid var(--bd);border-radius:12px;padding:14px;margin:12px 0}
+input,select,textarea{width:100%;padding:11px;margin:5px 0 10px;border:1px solid var(--bd);border-radius:8px;background:var(--bg);color:var(--fg);font:inherit}
+button{padding:10px 16px;border:0;border-radius:8px;background:var(--blue);color:#fff;font-weight:700;cursor:pointer;margin:2px}
+button.g{background:var(--gold);color:#14213d}button.l{background:none;color:var(--blue);border:2px solid var(--blue)}
+.msg{padding:10px;border-radius:8px;background:var(--gold);color:#14213d;margin:10px 0}
+.bar{height:10px;background:var(--bd);border-radius:6px}.bar i{display:block;height:100%;background:var(--gold);border-radius:6px}
+</style>
+</head>
+<body>
+<header><b>AFDPV · Formation en ligne</b><nav id="nav"></nav></header>
+<main id="app">Chargement…</main>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script>
+const sb=supabase.createClient('https://xhvxsbxzukmcnkxmxutz.supabase.co','sb_publishable_LRiNew5-qA5wyDzDcYml0A_GuNkunf0');
+const $=id=>document.getElementById(id);
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+let S=null,P=null,view='home',cur=null,mode='login',note='';
+const WA='+224 614 30 44 56';
+const app=h=>{$('app').innerHTML=(note?`<div class="msg">${esc(note)}</div>`:'')+h;note=''};
+const go=(v,f)=>{view=v;cur=f||null;render()};
+
+async function render(){
+ if(!S){$('nav').innerHTML='';return authView()}
+ if(!P){const r=await sb.from('profiles').select('*').eq('id',S.user.id).single();P=r.data}
+ $('nav').innerHTML=`<button class="l" onclick="go('home')">Formations</button>`+(P&&P.role==='admin'?`<button class="g" onclick="go('admin')">Admin</button>`:'')+`<button class="l" onclick="out()">Déconnexion</button>`;
+ if(view==='cours')return coursView();
+ if(view==='admin')return adminView();
+ homeView();
+}
+async function out(){await sb.auth.signOut();S=null;P=null;view='home';render()}
+
+function authView(){
+ const su=mode==='signup';
+ app(`<h2>${su?'Créer un compte':'Se connecter'}</h2><div class="c">
+ ${su?`<input id="nom" placeholder="Nom"><input id="prenom" placeholder="Prénom"><input id="tel" placeholder="Téléphone">`:''}
+ <input id="em" type="email" placeholder="Adresse e-mail"><input id="pw" type="password" placeholder="Mot de passe (8 caractères min.)">
+ ${su?`<input id="pw2" type="password" placeholder="Confirmer le mot de passe">`:''}
+ <button onclick="${su?'signup()':'login()'}">${su?'CRÉER MON COMPTE':'SE CONNECTER'}</button>
+ <button class="l" onclick="mode='${su?'login':'signup'}';render()">${su?'J’ai déjà un compte':'Créer un compte'}</button>
+ ${su?'':`<p><a href="#" onclick="reset();return false">Mot de passe oublié ?</a></p>`}</div>
+ <p>Contact : <a href="https://wa.me/224614304456">WhatsApp ${WA}</a></p>`);
+}
+async function signup(){
+ if($('pw').value!==$('pw2').value||$('pw').value.length<8){note='Mots de passe différents ou trop courts.';return authView()}
+ const {error}=await sb.auth.signUp({email:$('em').value.trim(),password:$('pw').value,options:{data:{nom:$('nom').value,prenom:$('prenom').value,telephone:$('tel').value}}});
+ note=error?'Erreur : '+error.message:'Compte créé. Vérifiez votre e-mail et cliquez sur le lien de confirmation, puis connectez-vous.';mode='login';authView();
+}
+async function login(){
+ const {data,error}=await sb.auth.signInWithPassword({email:$('em').value.trim(),password:$('pw').value});
+ if(error){note='Connexion impossible : '+error.message;return authView()}
+ S=data.session;render();
+}
+async function reset(){
+ const e=$('em').value.trim();if(!e){note='Entrez votre e-mail d’abord.';return authView()}
+ await sb.auth.resetPasswordForEmail(e);note='Si ce compte existe, un e-mail de récupération a été envoyé.';authView();
+}
+
+async function homeView(){
+ const [f,p]=await Promise.all([sb.from('formations').select('*').eq('publiee',true),sb.from('paiements').select('*').eq('user_id',S.user.id)]);
+ const pay=id=>(p.data||[]).filter(x=>x.formation_id===id);
+ app(`<h2>Bonjour ${esc(P?.prenom||'')}</h2>`+(f.data||[]).map(x=>{
+  const ps=pay(x.id),ok=ps.find(y=>y.statut==='confirme'),att=ps.find(y=>y.statut==='en_attente');
+  return `<div class="c"><h3>${esc(x.titre)}</h3><p>${esc(x.description)}</p><p><b>${x.tarif_gnf.toLocaleString('fr-FR')} FG</b></p>`+
+  (ok?`<button onclick="go('cours','${x.id}')">CONTINUER MA FORMATION</button>`:
+   att?`<div class="msg">Paiement en attente de confirmation (réf. ${esc(att.reference)}).</div>`:
+   `<button class="g" onclick="payForm('${x.id}',${x.tarif_gnf})">S’INSCRIRE ET PAYER</button><div id="pf${x.id}"></div>`)+
+  (ps.some(y=>y.statut==='refuse')?'<p>Un paiement précédent a été refusé. Contactez l’administration.</p>':'')+`</div>`}).join('')+
+  `<p>Aide : <a href="https://wa.me/224614304456">WhatsApp ${WA}</a></p>`);
+}
+function payForm(id,t){
+ $('pf'+id).innerHTML=`<div class="c"><p>1. Envoyez <b>${t.toLocaleString('fr-FR')} FG</b> par Orange Money au <b>${WA}</b>.<br>2. Saisissez la référence de la transaction reçue par SMS.</p><input id="ref${id}" placeholder="Référence de transaction"><button onclick="payer('${id}',${t})">J’AI PAYÉ</button></div>`;
+}
+async function payer(id,t){
+ const r=$('ref'+id).value.trim();if(r.length<4){note='Référence invalide.';return homeView()}
+ const {error}=await sb.from('paiements').insert({user_id:S.user.id,formation_id:id,montant_gnf:t,moyen:'manuel',reference:r});
+ note=error?'Erreur : '+error.message:'Paiement enregistré. Vous serez notifié après confirmation par l’administration.';homeView();
+}
+
+async function coursView(){
+ const [m,l,pr]=await Promise.all([sb.from('modules').select('*').eq('formation_id',cur).order('position'),sb.from('lecons').select('*').order('position'),sb.from('progression').select('lecon_id').eq('user_id',S.user.id)]);
+ const done=new Set((pr.data||[]).map(x=>x.lecon_id)),ids=new Set((m.data||[]).map(x=>x.id));
+ const ls=(l.data||[]).filter(x=>ids.has(x.module_id));
+ const pct=ls.length?Math.round(ls.filter(x=>done.has(x.id)).length/ls.length*100):0;
+ app(`<button class="l" onclick="go('home')">← Retour</button><h2>Mes cours</h2><div class="bar"><i style="width:${pct}%"></i></div><p>Progression : ${pct} %</p>`+
+ (m.data||[]).map((x,i)=>`<div class="c"><h3>Module ${i+1} : ${esc(x.titre)}</h3>`+
+  (ls.filter(y=>y.module_id===x.id).map(y=>`<div><b>${esc(y.titre)}</b><p style="white-space:pre-wrap">${esc(y.contenu)}</p>${y.video_url?`<a href="${esc(y.video_url)}" target="_blank" rel="noopener">▶ Vidéo</a> `:''}${y.pdf_url?`<a href="${esc(y.pdf_url)}" target="_blank" rel="noopener">📄 PDF</a>`:''}<br><button class="${done.has(y.id)?'l':''}" onclick="toggle('${y.id}',${done.has(y.id)})">${done.has(y.id)?'✓ Terminée':'Marquer comme terminée'}</button></div>`).join('')||'<p>Contenu bientôt disponible.</p>')+`</div>`).join(''));
+}
+async function toggle(id,d){
+ if(d)await sb.from('progression').delete().eq('user_id',S.user.id).eq('lecon_id',id);
+ else await sb.from('progression').insert({user_id:S.user.id,lecon_id:id});
+ coursView();
+}
+
+async function adminView(){
+ if(P?.role!=='admin')return go('home');
+ const [p,m]=await Promise.all([sb.from('paiements').select('*,profiles(nom,prenom,telephone),formations(titre)').order('created_at',{ascending:false}),sb.from('modules').select('id,titre,formations(titre)').order('position')]);
+ app(`<h2>Espace administrateur</h2><h3>Paiements</h3>`+(p.data||[]).map(x=>`<div class="c"><b>${esc(x.profiles?.prenom)} ${esc(x.profiles?.nom)}</b> · ${esc(x.profiles?.telephone)}<br>${esc(x.formations?.titre)} · ${x.montant_gnf.toLocaleString('fr-FR')} FG<br>Réf. ${esc(x.reference)} · ${new Date(x.created_at).toLocaleDateString('fr-FR')} · <b>${esc(x.statut)}</b><br>`+
+  (x.statut==='en_attente'?`<button onclick="setPay('${x.id}','confirme')">Confirmer</button><button class="l" onclick="setPay('${x.id}','refuse')">Refuser</button>`:'')+`</div>`).join('')+
+ `<h3>Ajouter une leçon</h3><div class="c"><select id="lm">${(m.data||[]).map(x=>`<option value="${x.id}">${esc(x.formations?.titre)} – ${esc(x.titre)}</option>`).join('')}</select><input id="lt" placeholder="Titre de la leçon"><textarea id="lc" rows="5" placeholder="Texte du cours"></textarea><input id="lv" placeholder="Lien vidéo (facultatif)"><input id="lp" placeholder="Lien PDF (facultatif)"><button onclick="addLecon()">Ajouter</button></div>`);
+}
+async function setPay(id,s){
+ const {error}=await sb.from('paiements').update({statut:s,confirme_le:s==='confirme'?new Date().toISOString():null}).eq('id',id);
+ note=error?error.message:'Statut mis à jour.';adminView();
+}
+async function addLecon(){
+ const {error}=await sb.from('lecons').insert({module_id:$('lm').value,titre:$('lt').value,contenu:$('lc').value,video_url:$('lv').value||null,pdf_url:$('lp').value||null});
+ note=error?error.message:'Leçon ajoutée.';adminView();
+}
+
+sb.auth.getSession().then(({data})=>{S=data.session;render()});
+sb.auth.onAuthStateChange((e,s)=>{if(e==='SIGNED_OUT'||e==='SIGNED_IN'){S=s;if(!s)P=null}});
+</script>
+</body>
+</html>
